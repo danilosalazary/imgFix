@@ -37,7 +37,7 @@ input[type=number]{width:66px;padding:4px 6px;border-radius:6px;border:1px solid
 <body>
 <header>
   <h1>Enderezar imagen</h1>
-  <p>Pega, arrastra o sube una imagen y mueve los 8 puntos: las 4 esquinas (rellenas) y los 4 puntos medios (huecos), que curvan los bordes para páginas dobladas.</p>
+  <p>Pega, arrastra o sube una imagen y mueve los 8 puntos: las 4 esquinas (rellenas) y los 4 puntos medios (huecos), que curvan los bordes para páginas dobladas. La barra junto a cada punto medio mueve el lado completo.</p>
 </header>
 <div class="bar">
   <button class="p" id="bPaste">Pegar del portapapeles</button>
@@ -48,6 +48,11 @@ input[type=number]{width:66px;padding:4px 6px;border-radius:6px;border:1px solid
 <main class="grid">
   <section class="card">
     <h2>1 · Marca los 8 puntos</h2>
+    <div class="bar">
+      <button id="eL" disabled title="Girar la imagen a la izquierda">↺ Girar</button>
+      <button id="eR" disabled title="Girar la imagen a la derecha">Girar ↻</button>
+      <span class="sl" style="margin:0"><label>Ángulo <input type="range" id="ea" min="-45" max="45" step="0.1" value="0" disabled> <input type="number" id="eav" min="-45" max="45" step="0.1" value="0" disabled aria-label="Ángulo de la imagen original">°</label></span>
+    </div>
     <div id="edwrap"><div id="drop">Pega con Ctrl+V, arrastra una imagen aquí o toca para elegir un archivo</div><canvas id="ed" hidden></canvas></div>
   </section>
   <section class="card">
@@ -79,7 +84,7 @@ input[type=number]{width:66px;padding:4px 6px;border-radius:6px;border:1px solid
 <script>
 const $=id=>document.getElementById(id);
 const ed=$('ed'),ex=ed.getContext('2d'),res=$('res'),rx=res.getContext('2d');
-let img=null,src=null,iw=0,ih=0,sc=1,P=[],drag=-1,raf=0;
+let side=-1,lp=null,sp=null,base=null,srcOK=false,eRot=0,eAng=0,raf3=0,img=null,src=null,iw=0,ih=0,sc=1,P=[],drag=-1,raf=0;
 const msg=t=>{$('st').textContent=t};
 /* Puntos: 0 TL, 1 T, 2 TR, 3 R, 4 BR, 5 B, 6 BL, 7 L */
 const cv=(a,m,b,t)=>{const p=(1-t)*(1-2*t),q=4*t*(1-t),r=t*(2*t-1);return[a[0]*p+m[0]*q+b[0]*r,a[1]*p+m[1]*q+b[1]*r]};
@@ -90,7 +95,9 @@ function coons(u,v){
 }
 const clen=(a,m,b)=>{let l=0,p=cv(a,m,b,0);for(let i=1;i<=24;i++){const q=cv(a,m,b,i/24);l+=Math.hypot(q[0]-p[0],q[1]-p[1]);p=q}return l};
 function reset(){const l=iw*.08,r=iw*.92,t=ih*.08,b=ih*.92,cx=iw/2,cy=ih/2;P=[[l,t],[cx,t],[r,t],[r,cy],[r,b],[cx,b],[l,b],[l,cy]]}
+const ensureSrc=()=>{if(!srcOK){src=img.getContext('2d').getImageData(0,0,iw,ih).data;srcOK=true}};
 function render(maxSide){
+  ensureSrc();
   let W=(clen(P[0],P[1],P[2])+clen(P[6],P[5],P[4]))/2,H=(clen(P[0],P[7],P[6])+clen(P[2],P[3],P[4]))/2;
   const s=Math.min(1,maxSide/Math.max(W,H));W=Math.max(1,Math.round(W*s));H=Math.max(1,Math.round(H*s));
   const c=document.createElement('canvas');c.width=W;c.height=H;
@@ -166,20 +173,39 @@ function show(){
   res.width=c.width;res.height=c.height;rx.drawImage(c,0,0);
   res.hidden=false;$('info').textContent=c.width+' × '+c.height+' px (vista previa)';
 }
-function preview(ms){if(!src)return;lw=render(ms);show()}
+function preview(ms){if(!base)return;lw=render(ms);show()}
 function draw(){
   if(!img)return;const k=ed.width/iw,px=1/sc;
   ex.setTransform(k,0,0,k,0,0);ex.clearRect(0,0,iw,ih);ex.drawImage(img,0,0,iw,ih);
   const line=(f,n)=>{ex.beginPath();for(let i=0;i<=n;i++){const p=f(i/n);i?ex.lineTo(p[0],p[1]):ex.moveTo(p[0],p[1])}ex.stroke()};
   ex.strokeStyle='rgba(255,255,255,.6)';ex.lineWidth=1*px;
   for(let i=1;i<4;i++){line(t=>coons(t,i/4),40);line(t=>coons(i/4,t),40)}
-  ex.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc').trim()||'#d9531e';ex.lineWidth=2.5*px;
+  const acc=getComputedStyle(document.documentElement).getPropertyValue('--acc').trim()||'#d9531e';
+  ex.strokeStyle=acc;ex.lineWidth=2.5*px;
   line(t=>cv(P[0],P[1],P[2],t),30);line(t=>cv(P[6],P[5],P[4],t),30);line(t=>cv(P[0],P[7],P[6],t),30);line(t=>cv(P[2],P[3],P[4],t),30);
+  ex.lineCap='round';
+  for(let i=1;i<8;i+=2){const g=barSeg(i);
+    ex.beginPath();ex.moveTo(g[0],g[1]);ex.lineTo(g[2],g[3]);ex.strokeStyle=acc;ex.lineWidth=12*px;ex.stroke();
+    ex.strokeStyle='#fff';ex.lineWidth=7*px;ex.stroke();
+  }
+  ex.lineCap='butt';
   P.forEach((p,i)=>{
-    const r=(i%2?7:9)*px;ex.beginPath();ex.arc(p[0],p[1],r,0,7);
-    ex.fillStyle=i%2?'#fff':ex.strokeStyle;ex.fill();ex.lineWidth=2.5*px;ex.strokeStyle='#fff';
-    if(!(i%2))ex.stroke();else{ex.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--acc').trim()||'#d9531e';ex.stroke()}
+    ex.beginPath();ex.arc(p[0],p[1],(i%2?7:9)*px,0,7);
+    ex.fillStyle=i%2?'#fff':acc;ex.fill();ex.lineWidth=2.5*px;ex.strokeStyle=i%2?acc:'#fff';ex.stroke();
   });
+}
+function barSeg(i){
+  const a=P[(i+7)%8],b=P[(i+1)%8],dx=b[0]-a[0],dy=b[1]-a[1],l=Math.hypot(dx,dy)||1,h=Math.min(36/sc,l*.3);
+  return[P[i][0]-dx/l*h,P[i][1]-dy/l*h,P[i][0]+dx/l*h,P[i][1]+dy/l*h];
+}
+function moveSide(m,dx,dy){
+  const f=[(m+7)%8,m,(m+1)%8],h=[(m+6)%8,(m+2)%8];
+  let lx=-Infinity,hx=Infinity,ly=-Infinity,hy=Infinity;
+  f.forEach(i=>{lx=Math.max(lx,-sp[i][0]);hx=Math.min(hx,iw-sp[i][0]);ly=Math.max(ly,-sp[i][1]);hy=Math.min(hy,ih-sp[i][1])});
+  dx=Math.min(hx,Math.max(lx,dx));dy=Math.min(hy,Math.max(ly,dy));
+  P=sp.map(q=>q.slice());
+  f.forEach(i=>{P[i][0]+=dx;P[i][1]+=dy});
+  h.forEach(i=>{P[i][0]=Math.min(iw,Math.max(0,P[i][0]+dx/2));P[i][1]=Math.min(ih,Math.max(0,P[i][1]+dy/2))});
 }
 function fit(){
   if(!img)return;const w=$('edwrap').clientWidth,dpr=window.devicePixelRatio||1;
@@ -192,9 +218,9 @@ function load(blob){
   im.onload=()=>{
     iw=im.naturalWidth;ih=im.naturalHeight;
     const c=document.createElement('canvas');c.width=iw;c.height=ih;
-    const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(im,0,0);src=x.getImageData(0,0,iw,ih).data;
-    img=im;reset();$('drop').hidden=true;ed.hidden=false;
-    rot=0;ang=0;$('an').value=$('anv').value=0;['bReset','bSave','bCopy','rL','rR','an','anv'].forEach(i=>$(i).disabled=false);
+    const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(im,0,0);
+    base=img=c;srcOK=false;eRot=0;eAng=0;$('ea').value=$('eav').value=0;reset();$('drop').hidden=true;ed.hidden=false;
+    rot=0;ang=0;$('an').value=$('anv').value=0;['bReset','bSave','bCopy','rL','rR','an','anv','eL','eR','ea','eav'].forEach(i=>$(i).disabled=false);
     fit();preview(900);msg('Imagen cargada: '+iw+' × '+ih+' px. Arrastra los puntos.');
   };
   im.onerror=()=>msg('No se pudo leer esa imagen.');
@@ -202,11 +228,18 @@ function load(blob){
 }
 const pos=e=>{const r=ed.getBoundingClientRect();return[(e.clientX-r.left)*iw/r.width,(e.clientY-r.top)*ih/r.height]};
 ed.addEventListener('pointerdown',e=>{
-  const p=pos(e);let best=-1,bd=28;
-  P.forEach((q,i)=>{const d=Math.hypot(q[0]-p[0],q[1]-p[1])*sc;if(d<bd){bd=d;best=i}});
-  if(best>=0){drag=best;ed.setPointerCapture(e.pointerId);e.preventDefault()}
+  const p=pos(e);let best=-1,bd=99;
+  P.forEach((q,i)=>{const d=Math.hypot(q[0]-p[0],q[1]-p[1])*sc;if(d<(i%2?15:28)&&d<bd){bd=d;best=i}});
+  if(best>=0){drag=best;side=-1;ed.setPointerCapture(e.pointerId);e.preventDefault();return}
+  let bs=-1;bd=16;
+  for(let i=1;i<8;i+=2){
+    const g=barSeg(i),vx=g[2]-g[0],vy=g[3]-g[1],t=Math.min(1,Math.max(0,((p[0]-g[0])*vx+(p[1]-g[1])*vy)/(vx*vx+vy*vy||1)));
+    const d=Math.hypot(p[0]-g[0]-t*vx,p[1]-g[1]-t*vy)*sc;if(d<bd){bd=d;bs=i}
+  }
+  if(bs>=0){side=bs;drag=-1;lp=p;sp=P.map(q=>q.slice());ed.setPointerCapture(e.pointerId);e.preventDefault()}
 });
 ed.addEventListener('pointermove',e=>{
+  if(side>=0){const q=pos(e);moveSide(side,q[0]-lp[0],q[1]-lp[1]);draw();if(!raf)raf=requestAnimationFrame(()=>{raf=0;preview(450)});return}
   if(drag<0)return;const p=pos(e);p[0]=Math.min(iw,Math.max(0,p[0]));p[1]=Math.min(ih,Math.max(0,p[1]));
   if(drag%2===0){
     const dx=(p[0]-P[drag][0])/2,dy=(p[1]-P[drag][1])/2;
@@ -215,7 +248,7 @@ ed.addEventListener('pointermove',e=>{
   P[drag]=p;draw();
   if(!raf)raf=requestAnimationFrame(()=>{raf=0;preview(450)});
 });
-const end=()=>{if(drag>=0){drag=-1;preview(900)}};
+const end=()=>{if(drag>=0||side>=0){drag=side=-1;preview(900)}};
 ed.addEventListener('pointerup',end);ed.addEventListener('pointercancel',end);
 $('bReset').onclick=()=>{reset();draw();preview(900)};
 $('bFile').onclick=$('drop').onclick=()=>$('fi').click();
@@ -250,6 +283,30 @@ function link(r,n,apply){
   R.ondblclick=()=>{R.value=N.value=0;go()};
 }
 link('an','anv',v=>ang=v);link('br','brv',()=>{});link('co','cov',()=>{});
+function setEdit(r,a){
+  if(!base)return;
+  const bw=base.width,bh=base.height,t0=(eRot*90+eAng)*Math.PI/180,t1=(r*90+a)*Math.PI/180;
+  const cs=Math.abs(Math.cos(t1)),sn=Math.abs(Math.sin(t1)),nw=Math.round(bw*cs+bh*sn),nh=Math.round(bw*sn+bh*cs);
+  const c0=Math.cos(-t0),s0=Math.sin(-t0),c1=Math.cos(t1),s1=Math.sin(t1);
+  P=P.map(p=>{const x=p[0]-iw/2,y=p[1]-ih/2,u=x*c0-y*s0,v=x*s0+y*c0;
+    return[Math.min(nw,Math.max(0,u*c1-v*s1+nw/2)),Math.min(nh,Math.max(0,u*s1+v*c1+nh/2))]});
+  eRot=r;eAng=a;iw=nw;ih=nh;
+  if(!t1)img=base;else{
+    const c=document.createElement('canvas');c.width=nw;c.height=nh;
+    const x=c.getContext('2d',{willReadFrequently:true});x.fillStyle='#fff';x.fillRect(0,0,nw,nh);
+    x.translate(nw/2,nh/2);x.rotate(t1);x.drawImage(base,-bw/2,-bh/2);img=c;
+  }
+  srcOK=false;fit();
+}
+const eq=()=>{if(!raf3)raf3=requestAnimationFrame(()=>{raf3=0;setEdit(eRot,+$('ea').value)})};
+const eNow=()=>{cancelAnimationFrame(raf3);raf3=0;setEdit(eRot,+$('ea').value);preview(900)};
+$('eL').onclick=()=>{setEdit((eRot+3)%4,eAng);preview(900)};
+$('eR').onclick=()=>{setEdit((eRot+1)%4,eAng);preview(900)};
+$('ea').oninput=()=>{$('eav').value=$('ea').value;eq()};
+$('ea').onchange=eNow;
+$('ea').ondblclick=()=>{$('ea').value=$('eav').value=0;eNow()};
+$('eav').oninput=()=>{const v=$('eav').value;if(v===''||isNaN(+v))return;$('ea').value=Math.min(45,Math.max(-45,+v));eq()};
+$('eav').onchange=()=>{$('eav').value=$('ea').value;eNow()};
 async function makePdf(c){
   const jd=new Uint8Array(await (await toBlob(c,'image/jpeg',.92)).arrayBuffer());
   const L=842,wide=c.width>=c.height,pw=(wide?L:L*c.width/c.height).toFixed(2),ph=(wide?L*c.height/c.width:L).toFixed(2);
@@ -277,14 +334,17 @@ function saveBlob(blob,name){
 
 
 
+
+
+
 $('bSave').onclick=async()=>{
-  if(!src)return;const f=$('fmt').value;msg('Generando imagen en alta resolución…');
+  if(!base)return;const f=$('fmt').value;msg('Generando imagen en alta resolución…');
   await new Promise(r=>setTimeout(r,30));
   const c=finish(render(f==='pdf'?3500:5000)),b=f==='pdf'?await makePdf(c):await toBlob(c,f==='jpg'?'image/jpeg':'image/png',.93);
   await saveBlob(b,'imagen-enderezada.'+f);
 };
 $('bCopy').onclick=async()=>{
-  if(!src)return;
+  if(!base)return;
   try{
     await navigator.clipboard.write([new ClipboardItem({'image/png':(async()=>toBlob(finish(render(5000)),'image/png'))()})]);
     msg('Imagen copiada al portapapeles.');
